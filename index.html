@@ -1,5 +1,5 @@
 <title>STRAVANTA</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <!-- Favicons -->
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png">
@@ -27,6 +27,11 @@
     height:100%;
     background:var(--bg);
     overflow:hidden;
+    overscroll-behavior:none;
+    touch-action:none;
+    -webkit-user-select:none;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
     cursor:none;
   }
   body{
@@ -211,33 +216,87 @@
 
     var word = "STRAVANTA";
     var isSmall = W < 640;
-    var fontSize = Math.min(W / (word.length * 0.92), H * 0.34);
-    if (isSmall) fontSize = Math.min(W / (word.length * 0.62), H * 0.22);
-    var tracking = fontSize * (isSmall ? 0.06 : 0.14);
+    var isVertical = isSmall && H > W;
 
     octx.textBaseline = 'alphabetic';
-    octx.font = '900 ' + fontSize.toFixed(1) + 'px Georgia, "Times New Roman", serif';
-
-    // measure total width including tracking
-    var widths = [];
-    var total = 0;
-    for (var i = 0; i < word.length; i++) {
-      var w = octx.measureText(word[i]).width;
-      widths.push(w);
-      total += w + (i < word.length - 1 ? tracking : 0);
-    }
-
-    var startX = (W - total) / 2;
-    var baselineY = H / 2 + fontSize * 0.34;
-
     octx.fillStyle = '#fff';
-    var cursorX = startX;
-    for (var j = 0; j < word.length; j++) {
-      octx.fillText(word[j], cursorX, baselineY);
-      cursorX += widths[j] + tracking;
-    }
 
-    var minX = startX, maxX = cursorX;
+    var minX, maxX, minY, maxY;
+
+    if (isVertical) {
+      // stack letters top-to-bottom, centered, one per line
+      var maxLetterWidth = W * 0.66;
+      var availableHeight = H * 0.86;
+      var lineRatio = 1.08;
+
+      var refSize = 200;
+      octx.font = '900 ' + refSize + 'px Georgia, "Times New Roman", serif';
+      var refMaxW = 0;
+      for (var ri = 0; ri < word.length; ri++) {
+        refMaxW = Math.max(refMaxW, octx.measureText(word[ri]).width);
+      }
+
+      var fontSizeFromWidth = (maxLetterWidth / refMaxW) * refSize;
+      var fontSizeFromHeight = availableHeight / (word.length * lineRatio);
+      var fontSize = Math.min(fontSizeFromWidth, fontSizeFromHeight);
+      var lineHeight = fontSize * lineRatio;
+
+      octx.font = '900 ' + fontSize.toFixed(1) + 'px Georgia, "Times New Roman", serif';
+      octx.textAlign = 'center';
+
+      var totalHeight = lineHeight * word.length;
+      var startY = (H - totalHeight) / 2 + fontSize * 0.78;
+      var centerX = W / 2;
+
+      var cursorY = startY;
+      for (var j = 0; j < word.length; j++) {
+        octx.fillText(word[j], centerX, cursorY);
+        cursorY += lineHeight;
+      }
+
+      octx.textAlign = 'left';
+      minY = startY - fontSize * 0.9;
+      maxY = cursorY - lineHeight + fontSize * 0.4;
+      minX = 0; maxX = 0; // unused in vertical mode
+    } else {
+      var maxWidth = W * (isSmall ? 0.90 : 0.86);
+      var maxFontFromHeight = H * (isSmall ? 0.30 : 0.34);
+      var trackingRatio = isSmall ? 0.06 : 0.14;
+
+      // measure at a reference size, then scale down so the word always fits maxWidth
+      var refSize2 = 200;
+      octx.font = '900 ' + refSize2 + 'px Georgia, "Times New Roman", serif';
+      var refTotal = refSize2 * trackingRatio * (word.length - 1);
+      for (var ri2 = 0; ri2 < word.length; ri2++) {
+        refTotal += octx.measureText(word[ri2]).width;
+      }
+
+      var fontSize2 = Math.min((maxWidth / refTotal) * refSize2, maxFontFromHeight);
+      var tracking = fontSize2 * trackingRatio;
+
+      octx.font = '900 ' + fontSize2.toFixed(1) + 'px Georgia, "Times New Roman", serif';
+
+      // measure total width including tracking
+      var widths = [];
+      var total = 0;
+      for (var i = 0; i < word.length; i++) {
+        var w = octx.measureText(word[i]).width;
+        widths.push(w);
+        total += w + (i < word.length - 1 ? tracking : 0);
+      }
+
+      var startX = (W - total) / 2;
+      var baselineY = H / 2 + fontSize2 * 0.34;
+
+      var cursorX = startX;
+      for (var j2 = 0; j2 < word.length; j2++) {
+        octx.fillText(word[j2], cursorX, baselineY);
+        cursorX += widths[j2] + tracking;
+      }
+
+      minX = startX; maxX = cursorX;
+      minY = 0; maxY = 0; // unused in horizontal mode
+    }
 
     var imgData = octx.getImageData(0, 0, W, H).data;
 
@@ -251,10 +310,13 @@
         var idx = (y * W + x) * 4;
         if (imgData[idx + 3] > 120) {
           var jitter = gap * 0.5;
+          var tVal = isVertical
+            ? (y - minY) / Math.max(1, (maxY - minY))
+            : (x - minX) / Math.max(1, (maxX - minX));
           pts.push({
             x: x + (Math.random() - 0.5) * jitter,
             y: y + (Math.random() - 0.5) * jitter,
-            t: (x - minX) / Math.max(1, (maxX - minX))
+            t: tVal
           });
         }
       }
@@ -349,7 +411,10 @@
 
   window.addEventListener('mousedown', function (e) { burst(e.clientX, e.clientY); });
   window.addEventListener('touchstart', function (e) {
-    if (e.touches && e.touches[0]) burst(e.touches[0].clientX, e.touches[0].clientY);
+    if (e.touches && e.touches[0]) {
+      setPointer(e.touches[0].clientX, e.touches[0].clientY);
+      burst(e.touches[0].clientX, e.touches[0].clientY);
+    }
   }, { passive: true });
 
   if (!pointerIsFine && cursorEl) cursorEl.style.display = 'none';
@@ -427,6 +492,10 @@
   window.addEventListener('resize', function () {
     clearTimeout(window.__rt);
     window.__rt = setTimeout(resize, 120);
+  });
+  window.addEventListener('orientationchange', function () {
+    clearTimeout(window.__rt);
+    window.__rt = setTimeout(resize, 200);
   });
 
   resize();
